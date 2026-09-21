@@ -19,7 +19,7 @@ async def send_whatsapp_message(to: str, text: str):
     payload = {
         "sessionId": OMDAA_SESSION_ID,
         "to": to,
-        "text": text,
+        "message": text,
     }
     try:
         async with aiohttp.ClientSession() as session:

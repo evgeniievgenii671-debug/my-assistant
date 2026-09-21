@@ -19,15 +19,15 @@ async def send_whatsapp_message(to: str, text: str):
     payload = {
         "sessionId": OMDAA_SESSION_ID,
         "to": to,
-        "text": {"body": text},
+        "text": text,
     }
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as resp:
+                body = await resp.text()
                 if resp.status != 200:
-                    body = await resp.text()
-                    logger.error("Ошибка Omdaa: %s — %s", resp.status, body)
+                    logger.error("Ошибка Omdaa %s: %s", resp.status, body)
                 else:
-                    logger.info("Сообщение отправлено в WhatsApp: %s", to)
+                    logger.info("Сообщение отправлено в WhatsApp %s", to)
     except Exception:
         logger.exception("Не удалось отправить в WhatsApp")

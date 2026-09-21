@@ -11,30 +11,45 @@ async def omdaa_webhook_handler(request: web.Request) -> web.Response:
     """Принимает вебхук от Omdaa (WhatsApp-сообщение) и отвечает."""
     try:
         data = await request.json()
-        logger.info("Omdaa webhook: %s", data)
+        event = data.get("event")
 
-        # Извлекаем данные сообщения
-        message = data.get("message", {}) or data
-        from_number = message.get("from") or data.get("from")
-        text = (
-            message.get("text", {}).get("body")
-            or message.get("body")
-            or data.get("text")
-        )
+        # Обрабатываем только новые сообщения
+        if event != "message.received":
+            return web.json_response({"status": "ignored", "event": event})
 
-        if not from_number or not text:
-            return web.json_response({"status": "ignored"})
+        msg = data.get("data", {}).get("message", {})
 
-        # Проверяем — не групповое ли сообщение
-        if "@g.us" in str(from_number):
-            logger.info("Групповое сообщение — игнорируем")
+        # Игнорируем свои исходящие
+        if msg.get("fromMe"):
+            return web.json_response({"status": "self_ignored"})
+
+        # Игнорируем группы
+        if msg.get("isGroup"):
             return web.json_response({"status": "group_ignored"})
 
-        # Получаем ответ от AI
-        reply = await ask_agent(int(from_number) if str(from_number).isdigit() else hash(from_number), text)
+        # Текст сообщения
+        content = msg.get("content", {}) or {}
+        text = content.get("text") or msg.get("text")
+        if not text:
+            logger.info("Сообщение без текста — игнорируем")
+            return web.json_response({"status": "no_text"})
 
-        # Отправляем ответ в WhatsApp
-        await send_whatsapp_message(from_number, reply)
+        # Номер отправителя (убираем @s.whatsapp.net)
+        remote_jid = msg.get("remoteJid", "")
+        phone = remote_jid.split("@")[0] if "@" in remote_jid else remote_jid
+        if not phone:
+            return web.json_response({"status": "no_phone"})
+
+        logger.info("Сообщение от %s: %s", phone, text)
+
+        # Уникальный числовой ID для истории
+        user_id = int(phone) if phone.isdigit() else abs(hash(phone))
+
+        # Ответ AI
+        reply = await ask_agent(user_id, text)
+
+        # Отправляем обратно в WhatsApp
+        await send_whatsapp_message(phone, reply)
 
         return web.json_response({"status": "ok"})
     except Exception as e:

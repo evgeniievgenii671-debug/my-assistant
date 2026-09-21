@@ -11,7 +11,7 @@ async def send_whatsapp_message(to: str, text: str):
         logger.warning("Omdaa не настроен")
         return
 
-    url = "https://api.omdaa.net/api/v1/messages/send-text"
+    url = "https://omdaa.com/api/v1/messages/send"
     headers = {
         "Authorization": f"Bearer {OMDAA_API_KEY}",
         "Content-Type": "application/json",
@@ -19,8 +19,7 @@ async def send_whatsapp_message(to: str, text: str):
     payload = {
         "sessionId": OMDAA_SESSION_ID,
         "to": to,
-        "text": text,
-        "options": {},
+        "message": text,
     }
     try:
         async with aiohttp.ClientSession() as session:

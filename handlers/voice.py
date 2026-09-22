@@ -30,7 +30,14 @@ async def handle_voice(message: Message):
 
         answer = await ask_agent(message.from_user.id, text)
 
-        # Отправляем голосовой ответ
+        await notify_admin(
+            message.bot,
+            message.from_user,
+            text,
+            answer,
+            is_voice=True,
+        )
+
         await message.bot.send_chat_action(message.chat.id, "record_voice")
         tts_path = await text_to_speech(answer)
 
@@ -40,7 +47,6 @@ async def handle_voice(message: Message):
         else:
             await message.answer(answer)
 
-        await notify_admin(message.bot, message.from_user, text, is_voice=True)
     finally:
         path.unlink(missing_ok=True)
         if tts_path:

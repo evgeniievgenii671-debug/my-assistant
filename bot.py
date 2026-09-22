@@ -32,15 +32,14 @@ async def main():
         await bot.set_webhook(f"{WEBHOOK_URL}{WEBHOOK_PATH}")
         logger.info("Bot started (webhook): %s", WEBHOOK_URL)
 
-        tg_app = web.Application()
-        SimpleRequestHandler(dispatcher=dp, bot=bot).register(tg_app, path=WEBHOOK_PATH)
-        setup_application(tg_app, dp, bot=bot)
+        app = web.Application()
+        # Telegram webhook — на основном приложении
+        SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+        setup_application(app, dp, bot=bot)
+        # Omdaa webhook — отдельный путь
+        app.router.add_post("/api/whatsapp", omdaa_webhook_handler)
 
-        main_app = web.Application()
-        main_app.router.add_post("/api/whatsapp", omdaa_webhook_handler)
-        main_app.add_subapp("/tg", tg_app)
-
-        runner = web.AppRunner(main_app)
+        runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
         await site.start()

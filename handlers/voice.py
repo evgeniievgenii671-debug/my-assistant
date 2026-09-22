@@ -43,7 +43,7 @@ async def handle_voice(message: Message):
 
         if tts_path:
             voice = FSInputFile(tts_path)
-            await message.answer_voice(voice, caption=answer)
+            await message.answer_voice(voice)
         else:
             await message.answer(answer)
 

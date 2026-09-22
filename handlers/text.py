@@ -12,5 +12,11 @@ async def handle_text(message: Message):
     await message.bot.send_chat_action(message.chat.id, "typing")
     answer = await ask_agent(message.from_user.id, message.text)
 
-    await notify_admin(message.bot, message.from_user, message.text, is_voice=False)
+    await notify_admin(
+        message.bot,
+        message.from_user,
+        message.text,
+        answer,
+        is_voice=False,
+    )
     await message.answer(answer)

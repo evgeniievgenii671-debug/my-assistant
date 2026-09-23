@@ -1,11 +1,12 @@
 import json
 import logging
+from pathlib import Path
 
 import aiosqlite
 
 from aiogram import Router
 from aiogram.filters import Command, CommandObject
-from aiogram.types import Message
+from aiogram.types import Message, FSInputFile
 
 from services.memory import reset_history, update_profile
 from config import DB_PATH, ADMIN_ID, START_SOURCES
@@ -13,7 +14,9 @@ from config import DB_PATH, ADMIN_ID, START_SOURCES
 logger = logging.getLogger(__name__)
 router = Router()
 
-# Хранилище для демо (в памяти + сохраняем в файл)
+DEMO_PATH = Path("demo.json")
+
+# Буфер в памяти
 _demo_buffer = {"photo": [], "video": []}
 
 
@@ -78,14 +81,47 @@ async def cmd_demo_save(message: Message):
         await message.answer("Пусто. Сначала /demo_start и загрузите файлы.")
         return
 
-    with open("demo.json", "w", encoding="utf-8") as f:
+    with open(DEMO_PATH, "w", encoding="utf-8") as f:
         json.dump(_demo_buffer, f, ensure_ascii=False, indent=2)
 
     await message.answer(
         f"Сохранено!\n"
         f"Фото: {len(_demo_buffer['photo'])}\n"
-        f"Видео: {len(_demo_buffer['video'])}\n\n"
-        f"Файл demo.json создан. Скачайте его из GitHub после деплоя."
+        f"Видео: {len(_demo_buffer['video'])}"
+    )
+
+
+@router.message(Command("demo_show"))
+async def cmd_demo_show(message: Message):
+    """Показывает содержимое demo.json"""
+    if message.from_user.id != ADMIN_ID:
+        return
+    if not DEMO_PATH.exists():
+        await message.answer("demo.json не найден. Сначала /demo_save.")
+        return
+
+    content = DEMO_PATH.read_text(encoding="utf-8")
+    # Отправляем как файл
+    file = FSInputFile(str(DEMO_PATH))
+    await message.answer_document(file, caption="Вот demo.json")
+    # И текстом — чтобы скопировать
+    await message.answer(f"<pre>{content}</pre>", parse_mode="HTML")
+
+
+@router.message(Command("demo_load"))
+async def cmd_demo_load(message: Message):
+    """Загружает demo.json с диска в буфер (на случай перезапуска)"""
+    if message.from_user.id != ADMIN_ID:
+        return
+    if not DEMO_PATH.exists():
+        await message.answer("demo.json не найден.")
+        return
+    data = json.loads(DEMO_PATH.read_text(encoding="utf-8"))
+    _demo_buffer["photo"] = data.get("photo", [])
+    _demo_buffer["video"] = data.get("video", [])
+    await message.answer(
+        f"Загружено из файла: Фото {len(_demo_buffer['photo'])}, "
+        f"Видео {len(_demo_buffer['video'])}"
     )
 
 

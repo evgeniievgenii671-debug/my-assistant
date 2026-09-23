@@ -14,6 +14,16 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
 OMDAA_API_KEY = os.environ.get("OMDAA_API_KEY", "")
 OMDAA_SESSION_ID = os.environ.get("OMDAA_SESSION_ID", "")
 
+# === Источники UTM (для ссылок вида t.me/bot?start=tiktok) ===
+START_SOURCES = {
+    "tiktok": "TikTok",
+    "instagram": "Instagram",
+    "olx": "OLX",
+    "2gis": "2GIS",
+    "whatsapp": "WhatsApp",
+    "direct": "Прямой",
+}
+
 # === Модели Groq ===
 MODEL_MAIN = "openai/gpt-oss-120b"
 MODEL_BACKUP = "openai/gpt-oss-20b"

@@ -8,6 +8,7 @@ from services.agent import ask_agent
 from services.whisper import transcribe
 from services.tts import text_to_speech
 from services.admin import notify_admin
+from services.profile import extract_and_save
 from config import TMP_DIR
 
 router = Router()
@@ -27,6 +28,9 @@ async def handle_voice(message: Message):
         if not text:
             await message.answer("Не разобрал голосовое, повторите, пожалуйста.")
             return
+
+        # Извлекаем имя/телефон/бизнес/город
+        await extract_and_save(message.from_user.id, text)
 
         answer = await ask_agent(message.from_user.id, text)
 

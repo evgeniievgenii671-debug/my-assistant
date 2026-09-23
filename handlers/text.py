@@ -3,6 +3,7 @@ from aiogram.types import Message
 
 from services.agent import ask_agent
 from services.admin import notify_admin
+from services.profile import extract_and_save
 
 router = Router()
 
@@ -10,6 +11,10 @@ router = Router()
 @router.message(F.text)
 async def handle_text(message: Message):
     await message.bot.send_chat_action(message.chat.id, "typing")
+
+    # Извлекаем имя/телефон/бизнес/город из сообщения
+    await extract_and_save(message.from_user.id, message.text)
+
     answer = await ask_agent(message.from_user.id, message.text)
 
     await notify_admin(

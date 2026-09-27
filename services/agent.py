@@ -40,38 +40,69 @@ SYSTEM_PROMPT = """Ты — вежливый ассистент Евгения �
 """
 
 
+async def get_available_models() -> list:
+    """Запрашивает у Groq список доступных моделей."""
+    try:
+        response = await client.models.list()
+        models = [m.id for m in response.data]
+        logger.info(f"Доступные модели: {models}")
+        return models
+    except Exception as e:
+        logger.error(f"Не удалось получить список моделей: {e}")
+        return []
+
+
+def pick_best_model(models: list):
+    """Выбирает лучшую модель из доступных."""
+    priorities = [
+        "llama-3.3-70b-versatile",
+        "llama-3.3-70b",
+        "llama-3.1-70b-versatile",
+        "llama3-70b",
+        "llama-3.1-8b-instant",
+        "llama3-8b",
+        "llama",
+        "gemma",
+        "mixtral",
+    ]
+    for pref in priorities:
+        for m in models:
+            if pref in m.lower():
+                return m
+    return models[0] if models else None
+
+
 async def ask_agent(user_id, user_text):
-    """
-    Принимает ID клиента и его сообщение.
-    Достаёт историю из памяти, отправляет в AI, сохраняет ответ.
-    """
     if not OPENAI_API_KEY:
         logger.error("OPENAI_API_KEY / GROQ_API_KEY не задан!")
         return "Ошибка конфигурации: не задан API-ключ."
 
-    # Импорт памяти внутри, чтобы избежать циклических импортов
+    # Загружаем историю
     try:
         from services.memory import get_history, add_message
         history = await get_history(user_id)
         await add_message(user_id, "user", user_text)
         history = history + [{"role": "user", "content": user_text}]
     except Exception as e:
-        # Если в memory.py другие функции — используем простой список
-        logger.warning(f"Не удалось загрузить память: {e}. Работаем без истории.")
+        logger.warning(f"Память недоступна: {e}")
+        add_message = None
         history = [{"role": "user", "content": user_text}]
+
+    # Получаем список моделей Groq
+    models = await get_available_models()
+    if not models:
+        return "Проблема с AI. Попробуйте позже 🙏"
+
+    best = pick_best_model(models)
+    logger.info(f"Выбрана модель: {best}")
+
+    # Пробуем сначала лучшую, потом остальные
+    models_to_try = [best] + [m for m in models if m != best]
+    # Ограничиваем попытки — не больше 5 моделей
+    models_to_try = models_to_try[:5]
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-10:]
 
-    models_to_try = [
-        MODEL_NAME,
-        "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile",
-        "llama-3.1-8b-instant",
-    ]
-    seen = set()
-    models_to_try = [m for m in models_to_try if not (m in seen or seen.add(m))]
-
-    last_error = None
     for model in models_to_try:
         try:
             response = await client.chat.completions.create(
@@ -83,17 +114,15 @@ async def ask_agent(user_id, user_text):
             text = response.choices[0].message.content
             logger.info(f"✅ Ответила модель: {model}")
 
-            # Сохраняем ответ в память
-            try:
-                from services.memory import add_message
-                await add_message(user_id, "assistant", text)
-            except Exception:
-                pass
+            # Сохраняем в память
+            if add_message:
+                try:
+                    await add_message(user_id, "assistant", text)
+                except Exception:
+                    pass
 
             return text
         except Exception as e:
-            last_error = str(e)
             logger.warning(f"Модель {model} не сработала: {e}")
 
-    logger.error(f"Все модели упали. Последняя ошибка: {last_error}")
     return "Извините, сейчас не могу ответить, попробуйте позже 🙏"

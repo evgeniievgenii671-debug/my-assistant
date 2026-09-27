@@ -1,8 +1,18 @@
 import os
 import logging
-import requests
+from openai import AsyncOpenAI
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+logger = logging.getLogger(__name__)
+
+# Клиент OpenAI (или совместимый API — Groq, OpenRouter и т.д.)
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
+
+client = AsyncOpenAI(
+    api_key=OPENAI_API_KEY,
+    base_url=OPENAI_BASE_URL
+)
 
 SYSTEM_PROMPT = """Ты — вежливый ассистент Евгения Алексеевича.
 Отвечай ТОЛЬКО на русском, грамотно, дружелюбно.
@@ -31,56 +41,43 @@ SYSTEM_PROMPT = """Ты — вежливый ассистент Евгения �
 """
 
 
-def get_available_models():
-    try:
-        r = requests.get(
-            "https://api.groq.com/openai/v1/models",
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-            timeout=10
-        )
-        return [m["id"] for m in r.json().get("data", [])]
-    except Exception as e:
-        logging.error(f"Ошибка списка моделей: {e}")
-        return []
+async def ask_agent(history):
+    """
+    Отправляет историю диалога в AI и возвращает ответ.
+    history — список словарей вида [{"role": "user", "content": "..."}]
+    """
+    if not OPENAI_API_KEY:
+        logger.error("OPENAI_API_KEY / GROQ_API_KEY не задан!")
+        return "Ошибка конфигурации: не задан API-ключ."
 
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history
 
-def pick_best_model(models):
-    priorities = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama3-70b", "mixtral-8x7b"]
-    for pref in priorities:
-        for m in models:
-            if pref in m:
-                return m
-    return models[0] if models else None
+    # Список моделей на случай fallback
+    models_to_try = [
+        MODEL_NAME,
+        "llama-3.3-70b-versatile",
+        "llama-3.1-70b-versatile",
+        "llama-3.1-8b-instant",
+    ]
+    # Убираем дубликаты
+    seen = set()
+    models_to_try = [m for m in models_to_try if not (m in seen or seen.add(m))]
 
-
-def ask_groq(history):
-    if not GROQ_API_KEY:
-        return "Ошибка конфигурации."
-
-    models = get_available_models()
-    if not models:
-        return "Проблема с AI. Попробуйте позже 🙏"
-
-    best = pick_best_model(models)
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    for model in [best] + [m for m in models if m != best][:4]:
-        payload = {
-            "model": model,
-            "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + history,
-            "temperature": 0.3
-        }
+    last_error = None
+    for model in models_to_try:
         try:
-            r = requests.post(url, json=payload, headers=headers, timeout=30)
-            data = r.json()
-            if "choices" in data:
-                logging.info(f"✅ Ответила модель: {model}")
-                return data["choices"][0]["message"]["content"]
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=400,
+            )
+            text = response.choices[0].message.content
+            logger.info(f"✅ Ответила модель: {model}")
+            return text
         except Exception as e:
-            logging.error(f"Ошибка {model}: {e}")
+            last_error = str(e)
+            logger.warning(f"Модель {model} не сработала: {e}")
 
-    return "Извините, сейчас не могу ответить 🙏"
+    logger.error(f"Все модели упали. Последняя ошибка: {last_error}")
+    return "Извините, сейчас не могу ответить, попробуйте позже 🙏"

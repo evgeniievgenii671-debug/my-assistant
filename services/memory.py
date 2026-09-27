@@ -29,6 +29,7 @@ async def init_db() -> None:
         await db.commit()
 
 
+# ============ ИСТОРИЯ ДИАЛОГА ============
 async def get_history(user_id: int) -> list:
     """Возвращает последние MAX_TURNS*2 сообщений в формате [{role, content}]."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -38,7 +39,6 @@ async def get_history(user_id: int) -> list:
         )
         rows = await cursor.fetchall()
         await cursor.close()
-    # Разворачиваем — старое в начало
     return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
 
 
@@ -52,7 +52,15 @@ async def add_message(user_id: int, role: str, content: str) -> None:
         await db.commit()
 
 
-async def save_profile(user_id: int, **fields) -> None:
+async def reset_history(user_id: int) -> None:
+    """Удаляет всю историю диалога клиента."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM history WHERE user_id = ?", (user_id,))
+        await db.commit()
+
+
+# ============ ПРОФИЛЬ КЛИЕНТА ============
+async def update_profile(user_id: int, **fields) -> None:
     """Сохраняет/обновляет профиль клиента (имя, телефон, бизнес, город)."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""

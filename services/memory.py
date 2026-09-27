@@ -29,76 +29,62 @@ async def init_db() -> None:
         await db.commit()
 
 
-# === История диалога ===
-
 async def get_history(user_id: int) -> list:
+    """Возвращает последние MAX_TURNS*2 сообщений в формате [{role, content}]."""
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            "SELECT role, content FROM history WHERE user_id = ? "
-            "ORDER BY id DESC LIMIT ?",
-            (user_id, MAX_TURNS),
+            "SELECT role, content FROM history WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (user_id, MAX_TURNS * 2)
         )
         rows = await cursor.fetchall()
-    return [{"role": r, "content": c} for r, c in reversed(rows)]
+        await cursor.close()
+    # Разворачиваем — старое в начало
+    return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
 
 
 async def add_message(user_id: int, role: str, content: str) -> None:
+    """Сохраняет сообщение в историю."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "INSERT INTO history (user_id, role, content) VALUES (?, ?, ?)",
-            (user_id, role, content),
+            (user_id, role, content)
         )
         await db.commit()
 
 
-async def reset_history(user_id: int) -> None:
+async def save_profile(user_id: int, **fields) -> None:
+    """Сохраняет/обновляет профиль клиента (имя, телефон, бизнес, город)."""
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM history WHERE user_id = ?", (user_id,))
+        await db.execute("""
+            INSERT INTO profiles (user_id, name, phone, business, city, source)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                name = COALESCE(excluded.name, profiles.name),
+                phone = COALESCE(excluded.phone, profiles.phone),
+                business = COALESCE(excluded.business, profiles.business),
+                city = COALESCE(excluded.city, profiles.city),
+                source = COALESCE(excluded.source, profiles.source),
+                updated_at = CURRENT_TIMESTAMP
+        """, (
+            user_id,
+            fields.get("name"),
+            fields.get("phone"),
+            fields.get("business"),
+            fields.get("city"),
+            fields.get("source"),
+        ))
         await db.commit()
 
 
-# === Профиль клиента ===
-
-async def get_profile(user_id: int) -> dict:
+async def get_profile(user_id: int):
+    """Возвращает профиль клиента (dict) или None."""
     async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT name, phone, business, city, source "
-            "FROM profiles WHERE user_id = ?",
-            (user_id,),
+            "SELECT name, phone, business, city FROM profiles WHERE user_id = ?",
+            (user_id,)
         )
         row = await cursor.fetchone()
-    if row:
-        return dict(row)
-    return {}
-
-
-async def update_profile(user_id: int, **fields) -> None:
-    """Обновляет только те поля, которые переданы."""
-    if not fields:
-        return
-    async with aiosqlite.connect(DB_PATH) as db:
-        # Проверяем, есть ли запись
-        cursor = await db.execute(
-            "SELECT user_id FROM profiles WHERE user_id = ?",
-            (user_id,),
-        )
-        exists = await cursor.fetchone()
-        if exists:
-            sets = ", ".join(f"{k} = ?" for k in fields)
-            values = list(fields.values()) + [user_id]
-            await db.execute(
-                f"UPDATE profiles SET {sets}, "
-                f"updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
-                values,
-            )
-        else:
-            keys = ["user_id"] + list(fields.keys())
-            placeholders = ", ".join("?" * len(keys))
-            values = [user_id] + list(fields.values())
-            await db.execute(
-                f"INSERT INTO profiles ({', '.join(keys)}) "
-                f"VALUES ({placeholders})",
-                values,
-            )
-        await db.commit()
+        await cursor.close()
+    if not row:
+        return None
+    return {"name": row[0], "phone": row[1], "business": row[2], "city": row[3]}

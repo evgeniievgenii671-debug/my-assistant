@@ -4,7 +4,6 @@ from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
-# Клиент OpenAI (или совместимый API — Groq, OpenRouter и т.д.)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
 MODEL_NAME = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
@@ -41,25 +40,34 @@ SYSTEM_PROMPT = """Ты — вежливый ассистент Евгения �
 """
 
 
-async def ask_agent(history):
+async def ask_agent(user_id, user_text):
     """
-    Отправляет историю диалога в AI и возвращает ответ.
-    history — список словарей вида [{"role": "user", "content": "..."}]
+    Принимает ID клиента и его сообщение.
+    Достаёт историю из памяти, отправляет в AI, сохраняет ответ.
     """
     if not OPENAI_API_KEY:
         logger.error("OPENAI_API_KEY / GROQ_API_KEY не задан!")
         return "Ошибка конфигурации: не задан API-ключ."
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history
+    # Импорт памяти внутри, чтобы избежать циклических импортов
+    try:
+        from services.memory import get_history, add_message
+        history = await get_history(user_id)
+        await add_message(user_id, "user", user_text)
+        history = history + [{"role": "user", "content": user_text}]
+    except Exception as e:
+        # Если в memory.py другие функции — используем простой список
+        logger.warning(f"Не удалось загрузить память: {e}. Работаем без истории.")
+        history = [{"role": "user", "content": user_text}]
 
-    # Список моделей на случай fallback
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-10:]
+
     models_to_try = [
         MODEL_NAME,
         "llama-3.3-70b-versatile",
         "llama-3.1-70b-versatile",
         "llama-3.1-8b-instant",
     ]
-    # Убираем дубликаты
     seen = set()
     models_to_try = [m for m in models_to_try if not (m in seen or seen.add(m))]
 
@@ -74,6 +82,14 @@ async def ask_agent(history):
             )
             text = response.choices[0].message.content
             logger.info(f"✅ Ответила модель: {model}")
+
+            # Сохраняем ответ в память
+            try:
+                from services.memory import add_message
+                await add_message(user_id, "assistant", text)
+            except Exception:
+                pass
+
             return text
         except Exception as e:
             last_error = str(e)

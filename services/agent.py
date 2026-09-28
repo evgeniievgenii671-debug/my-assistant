@@ -133,3 +133,30 @@ async def ask_agent(user_id, user_text):
 
     logger.error(f"Все упали. Последняя: {last_error}")
     return "Извините, сейчас не могу ответить 🙏"
+import re
+
+
+def extract_phone(text: str):
+    """Ищет телефон в тексте."""
+    patterns = [
+        r"\+7[\s\-\(\)]?\d{3}[\s\-\(\)]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}",
+        r"8[\s\-\(\)]?\d{3}[\s\-\(\)]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}",
+        r"\d{10,11}",
+    ]
+    for p in patterns:
+        m = re.search(p, text)
+        if m:
+            return m.group(0)
+    return None
+
+
+async def auto_save_profile(user_id: int, user_text: str):
+    """Автоматически сохраняет телефон из сообщения."""
+    try:
+        from services.memory import update_profile
+        phone = extract_phone(user_text)
+        if phone:
+            await update_profile(user_id, phone=phone)
+            logger.info(f"📱 Телефон сохранён для {user_id}: {phone}")
+    except Exception as e:
+        logger.warning(f"Не удалось сохранить телефон: {e}")

@@ -118,7 +118,7 @@ async def ask_agent(user_id, user_text):
                 model=model,
                 messages=messages,
                 temperature=0.3,
-                max_tokens=80,
+                max_tokens=150,
             )
             text = response.choices[0].message.content
             logger.info(f"✅ Ответила модель: {model}")
@@ -130,8 +130,10 @@ async def ask_agent(user_id, user_text):
                 except Exception:
                     pass
 
-            return text
-        except Exception as e:
-            logger.warning(f"Модель {model} не сработала: {e}")
+           text = response.choices[0].message.content
+if not text or not text.strip():
+    logger.warning(f"Модель {model} вернула пустой ответ, пробуем следующую")
+    continue
+logger.info(f"✅ Ответила модель: {model}")
 
     return "Извините, сейчас не могу ответить, попробуйте позже 🙏"

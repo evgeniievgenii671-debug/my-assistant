@@ -1,33 +1,43 @@
 import logging
-import aiohttp
-from config import OMDAA_API_KEY, OMDAA_SESSION_ID
+from aiohttp import web
+
+from services.agent import ask_agent
+from services.omdaa import send_whatsapp_message
 
 logger = logging.getLogger(__name__)
 
 
-async def send_whatsapp_message(to: str, text: str):
-    """Отправляет сообщение в WhatsApp через API Omdaa."""
-    if not OMDAA_API_KEY or not OMDAA_SESSION_ID:
-        logger.warning("Omdaa не настроен — сообщение не отправлено")
-        return
-
-    url = "https://omdaa.com/api/v1/messages/send-text"
-    headers = {
-        "Authorization": f"Bearer {OMDAA_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "sessionId": OMDAA_SESSION_ID,
-        "to": to,
-        "message": text,
-    }
+async def omdaa_webhook_handler(request):
+    """Принимает вебхук от Omdaa (WhatsApp-сообщения)."""
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as resp:
-                body = await resp.text()
-                if resp.status != 200:
-                    logger.error("Ошибка Omdaa %s: %s", resp.status, body)
-                else:
-                    logger.info("✅ Сообщение отправлено в WhatsApp %s", to)
-    except Exception:
-        logger.exception("Не удалось отправить в WhatsApp")
+        data = await request.json()
+        event = data.get("event")
+
+        # Обрабатываем только новые сообщения
+        if event != "message.received":
+            return web.json_response({"status": "ignored"})
+
+        msg = data.get("data", {}).get("message", {})
+        sender = data.get("data", {}).get("from")  # номер отправителя
+        text = msg.get("text", {}).get("body") or msg.get("body", "")
+
+        if not sender or not text:
+            logger.warning(f"Пустое сообщение от Omdaa: {data}")
+            return web.json_response({"status": "empty"})
+
+        logger.info(f"📱 WhatsApp от {sender}: {text}")
+
+        # Генерируем ответ через AI
+        answer = await ask_agent(sender, text)
+
+        if not answer or not answer.strip():
+            answer = "Извините, не могу ответить. Попробуйте позже 🙏"
+
+        # Отправляем ответ обратно в WhatsApp
+        await send_whatsapp_message(sender, answer)
+
+        return web.json_response({"status": "ok"})
+
+    except Exception as e:
+        logger.exception(f"Ошибка в omdaa_webhook_handler: {e}")
+        return web.json_response({"status": "error"}, status=500)

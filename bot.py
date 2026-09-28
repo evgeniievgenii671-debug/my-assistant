@@ -20,6 +20,7 @@ PORT = int(os.environ.get("PORT", 8080))
 
 
 async def health_check(request):
+    """Health-check для cron-job.org — отвечает 200 OK."""
     return web.Response(text="OK", status=200)
 
 
@@ -37,15 +38,11 @@ async def main():
         logger.info("Bot started (webhook): %s", WEBHOOK_URL)
 
         app = web.Application()
-
-        # ✅ Health-check для cron-job.org
+        # Health-check регистрируем ПЕРВЫМ
         app.router.add_get("/", health_check)
 
-        # Telegram webhook
         SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
         setup_application(app, dp, bot=bot)
-
-        # Omdaa webhook
         app.router.add_post("/api/whatsapp", omdaa_webhook_handler)
 
         runner = web.AppRunner(app)

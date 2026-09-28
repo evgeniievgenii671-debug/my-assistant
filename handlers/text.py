@@ -1,6 +1,6 @@
 import logging
 from aiogram import Router, types
-from config import MANAGER_CHAT_ID
+from config import ADMIN_ID
 from services.agent import ask_agent
 
 logger = logging.getLogger(__name__)
@@ -33,11 +33,11 @@ async def handle_text(message: types.Message):
     except Exception as e:
         logger.error(f"Ошибка отправки: {e}")
 
-    # Уведомление менеджеру — ПОСЛЕ ответа, с полным диалогом
-    if MANAGER_CHAT_ID:
+    # Уведомление админу — ПОСЛЕ ответа, с полным диалогом
+    if ADMIN_ID:
         try:
             await message.bot.send_message(
-                MANAGER_CHAT_ID,
+                ADMIN_ID,
                 f"🔔 <b>Новый диалог</b>\n\n"
                 f"👤 Клиент: {full_name}\n"
                 f"📱 @{username}\n"

@@ -40,15 +40,16 @@ async def handle_text(message: types.Message):
     logger.info(f"🔔 Пробуем отправить уведомление на ADMIN_ID={ADMIN_ID}")
     if ADMIN_ID and ADMIN_ID != 0:
         try:
-            sent = await message.bot.send_message(
-                ADMIN_ID,
-                f"🔔 <b>Новый диалог</b>\n\n"
-                f"👤 Клиент: {full_name}\n"
-                f"📱 @{username}\n"
-                f"🆔 <code>{user_id}</code>\n\n"
-                f"💬 <b>Написал:</b> {user_text}\n\n"
-                f"🤖 <b>Бот ответил:</b> {answer}"
-            )
+          sent = await message.bot.send_message(
+    ADMIN_ID,
+    f"🔔 <b>Новый диалог</b>\n\n"
+    f"👤 Клиент: {full_name}\n"
+    f"📱 @{username}\n"
+    f"🆔 <code>{user_id}</code>\n\n"
+    f"💬 <b>Написал:</b> {user_text}\n"
+    f"🤖 <b>Бот ответил:</b> {answer}",
+    parse_mode="HTML"
+)  
             logger.info(f"✅ Уведомление отправлено! message_id={sent.message_id}")
         except Exception as e:
             logger.error(f"❌ Ошибка уведомления: {e}")

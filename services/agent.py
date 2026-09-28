@@ -120,29 +120,28 @@ async def ask_agent(user_id, user_text):
 
     for model in models_to_try:
         try:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=0.3,
-                max_tokens=150,
-            )
-           text = response.choices[0].message.content
+        response = await client.chat.completions.create(
+    model=model,
+    messages=messages,
+    temperature=0.3,
+    max_tokens=150,
+)
+text = response.choices[0].message.content
+
+# Защита: пустой ответ — пробуем следующую модель
 if not text or not text.strip():
     logger.warning(f"Модель {model} вернула пустой ответ, пробуем следующую")
     continue
+
 logger.info(f"✅ Ответила модель: {model}")
 
-            # Сохраняем в память
-            if add_message:
-                try:
-                    await add_message(user_id, "assistant", text)
-                except Exception:
-                    pass
+# Сохраняем в память
+if add_message:
+    try:
+        await add_message(user_id, "assistant", text)
+    except Exception:
+        pass
 
-           text = response.choices[0].message.content
-if not text or not text.strip():
-    logger.warning(f"Модель {model} вернула пустой ответ, пробуем следующую")
-    continue
-logger.info(f"✅ Ответила модель: {model}")
-
+# ⬇️ ВОТ ЭТА СТРОКА БЫЛА ПРОПУЩЕНА!
+return text    
     return "Извините, сейчас не могу ответить, попробуйте позже 🙏"

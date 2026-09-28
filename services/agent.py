@@ -16,29 +16,62 @@ SYSTEM_PROMPT = """Ты — вежливый ассистент Евгения �
 МЫ ЗАНИМАЕМСЯ: Telegram/WhatsApp-боты, сайты, AI-ассистенты для бизнеса.
 
 КРИТИЧЕСКИЕ ПРАВИЛА:
-1. Отвечай МАКСИМУМ 1 предложением. Это НЕ рекомендация, а ЗАКОН.
-2. Никогда не пиши больше 20 слов. Считай слова!
+1. Отвечай МАКСИМУМ 1 предложением.
+2. Никогда не пиши больше 20 слов.
 3. Задавай ТОЛЬКО ОДИН вопрос.
-4. ЗАПРЕЩЕНЫ любые вступления ("Привет", "Конечно", "Отлично", "Мы рады"). Сразу вопрос или ответ.
-5. ЗАПРЕЩЕНО перечислять варианты. Только суть.
+4. ЗАПРЕЩЕНЫ вступления ("Привет", "Конечно", "Отлично").
+5. ЗАПРЕЩЕНО перечислять варианты.
 6. Не пиши "Бот:" или "Ассистент:".
 7. Если клиент назвал имя — используй. Не назвал — спроси один раз. Не хочет — иди дальше.
 8. Цены не называй. Только: "Зависит от задачи".
 9. Пиши грамотно.
 """
 
-# НАДЁЖНЫЕ МОДЕЛИ (только те, что точно работают с русским)
-RELIABLE_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "llama3-70b-8192",
-    "llama-3.1-70b-versatile",
+# Плохие модели: арабские, голосовые, слабые
+BAD_MODELS = [
+    "allam", "whisper", "tts", "guard",
+    "gemma2-9b", "gemma-7b",
+    "llama-3.2-1b", "llama-3.2-3b",
+    "qwen", "mixtral-8x7b",
+    "llama-3.1-70b-versatile",  # decommissioned
 ]
+
+
+async def get_good_models() -> list:
+    """Запрашивает у Groq список моделей и фильтрует плохие."""
+    try:
+        response = await client.models.list()
+        all_models = [m.id for m in response.data]
+        logger.info(f"Всего моделей у Groq: {len(all_models)}")
+
+        good = [m for m in all_models if not any(bad in m.lower() for bad in BAD_MODELS)]
+        logger.info(f"Подходящих моделей: {good}")
+        return good
+    except Exception as e:
+        logger.error(f"Не удалось получить список моделей: {e}")
+        return []
+
+
+def pick_priority_model(models: list):
+    """Выбирает лучшую по приоритету."""
+    priorities = [
+        "llama-3.3-70b-versatile",
+        "llama-3.3-70b",
+        "llama-3.1-8b-instant",
+        "llama-3.1-8b",
+        "llama3-70b",
+        "llama3-8b",
+    ]
+    for pref in priorities:
+        for m in models:
+            if pref in m.lower():
+                return m
+    return models[0] if models else None
 
 
 async def ask_agent(user_id, user_text):
     if not OPENAI_API_KEY:
-        logger.error("OPENAI_API_KEY / GROQ_API_KEY не задан!")
+        logger.error("API-ключ не задан!")
         return "Ошибка конфигурации: не задан API-ключ."
 
     # Загружаем историю
@@ -52,10 +85,21 @@ async def ask_agent(user_id, user_text):
         logger.warning(f"Память недоступна: {e}")
         history = [{"role": "user", "content": user_text}]
 
+    # Получаем список рабочих моделей
+    models = await get_good_models()
+    if not models:
+        return "Проблема с AI. Попробуйте позже 🙏"
+
+    best = pick_priority_model(models)
+    logger.info(f"Выбрана модель: {best}")
+
+    # Лучшая — первая, потом остальные
+    models_to_try = [best] + [m for m in models if m != best]
+    models_to_try = models_to_try[:5]
+
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-10:]
 
-    last_error = None
-    for model in RELIABLE_MODELS:
+    for model in models_to_try:
         try:
             response = await client.chat.completions.create(
                 model=model,
@@ -66,7 +110,7 @@ async def ask_agent(user_id, user_text):
             text = response.choices[0].message.content
 
             if not text or not text.strip():
-                logger.warning(f"Модель {model} вернула пустой ответ")
+                logger.warning(f"Модель {model} вернула пусто, пробуем следующую")
                 continue
 
             logger.info(f"✅ Ответила модель: {model}")
@@ -80,9 +124,7 @@ async def ask_agent(user_id, user_text):
             return text
 
         except Exception as e:
-            last_error = str(e)
             logger.warning(f"Модель {model} не сработала: {e}")
             continue
 
-    logger.error(f"Все модели упали. Последняя ошибка: {last_error}")
     return "Извините, сейчас не могу ответить, попробуйте позже 🙏"

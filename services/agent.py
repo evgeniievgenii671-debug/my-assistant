@@ -62,7 +62,16 @@ async def get_available_models() -> list:
 
 
 def pick_best_model(models: list):
-    """Выбирает лучшую модель из доступных."""
+    """Выбирает лучшую модель, исключая слабые/неподходящие."""
+    # Плохие модели — арабские, маленькие, не для русского
+    BAD_MODELS = ["allam", "whisper", "tts", "guard", "gemma2-9b", "llama-3.2-1b", "llama-3.2-3b"]
+
+    # Фильтруем
+    good_models = [m for m in models if not any(bad in m.lower() for bad in BAD_MODELS)]
+    if not good_models:
+        good_models = models  # если ничего не осталось — берём что есть
+
+    # Приоритет — умные модели
     priorities = [
         "llama-3.3-70b-versatile",
         "llama-3.3-70b",
@@ -70,15 +79,12 @@ def pick_best_model(models: list):
         "llama3-70b",
         "llama-3.1-8b-instant",
         "llama3-8b",
-        "llama",
-        "gemma",
-        "mixtral",
     ]
     for pref in priorities:
-        for m in models:
+        for m in good_models:
             if pref in m.lower():
                 return m
-    return models[0] if models else None
+    return good_models[0] if good_models else None
 
 
 async def ask_agent(user_id, user_text):

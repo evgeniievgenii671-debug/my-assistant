@@ -29,9 +29,7 @@ async def init_db() -> None:
         await db.commit()
 
 
-# ============ ИСТОРИЯ ДИАЛОГА ============
 async def get_history(user_id: int) -> list:
-    """Возвращает последние MAX_TURNS*2 сообщений в формате [{role, content}]."""
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
             "SELECT role, content FROM history WHERE user_id = ? ORDER BY id DESC LIMIT ?",
@@ -43,7 +41,6 @@ async def get_history(user_id: int) -> list:
 
 
 async def add_message(user_id: int, role: str, content: str) -> None:
-    """Сохраняет сообщение в историю."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "INSERT INTO history (user_id, role, content) VALUES (?, ?, ?)",
@@ -53,15 +50,12 @@ async def add_message(user_id: int, role: str, content: str) -> None:
 
 
 async def reset_history(user_id: int) -> None:
-    """Удаляет всю историю диалога клиента."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM history WHERE user_id = ?", (user_id,))
         await db.commit()
 
 
-# ============ ПРОФИЛЬ КЛИЕНТА ============
 async def update_profile(user_id: int, **fields) -> None:
-    """Сохраняет/обновляет профиль клиента (имя, телефон, бизнес, город)."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             INSERT INTO profiles (user_id, name, phone, business, city, source)
@@ -85,7 +79,6 @@ async def update_profile(user_id: int, **fields) -> None:
 
 
 async def get_profile(user_id: int):
-    """Возвращает профиль клиента (dict) или None."""
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
             "SELECT name, phone, business, city FROM profiles WHERE user_id = ?",
@@ -96,3 +89,14 @@ async def get_profile(user_id: int):
     if not row:
         return None
     return {"name": row[0], "phone": row[1], "business": row[2], "city": row[3]}
+
+
+async def get_all_profiles():
+    """Все заявки — для админа."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT user_id, name, phone, business, city, updated_at FROM profiles ORDER BY updated_at DESC"
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+    return rows

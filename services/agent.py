@@ -118,7 +118,7 @@ async def ask_agent(user_id, user_text):
                 model=model,
                 messages=messages,
                 temperature=0.3,
-                max_tokens=400,
+                max_tokens=80,
             )
             text = response.choices[0].message.content
             logger.info(f"✅ Ответила модель: {model}")

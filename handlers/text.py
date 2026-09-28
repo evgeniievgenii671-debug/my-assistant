@@ -74,11 +74,10 @@ async def handle_text(message: Message):
     await extract_and_save(message.from_user.id, message.text)
 
     # Генерируем ответ
-  answer = await ask_agent(message.from_user.id, message.text)
+ answer = await ask_agent(message.from_user.id, message.text)
 if not answer or not answer.strip():
     answer = "Извините, не могу ответить. Попробуйте ещё раз 🙏"
 await message.answer(answer)
-
     # Уведомление вам
     await notify_admin(
         message.bot,

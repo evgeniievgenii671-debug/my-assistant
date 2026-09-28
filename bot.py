@@ -49,7 +49,9 @@ async def main():
         logger.info("Bot started (polling)")
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
-
+# ============ HEALTH-CHECK ДЛЯ CRON-JOB.ORG ============
+async def health_check(request):
+    return web.Response(text="OK", status=200)
 
 if __name__ == "__main__":
     asyncio.run(main())

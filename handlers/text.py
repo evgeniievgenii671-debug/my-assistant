@@ -6,6 +6,9 @@ from services.agent import ask_agent
 logger = logging.getLogger(__name__)
 router = Router()
 
+# Логируем ADMIN_ID при импорте
+logger.info(f"🔔 ADMIN_ID загружен: {ADMIN_ID} (тип: {type(ADMIN_ID).__name__})")
+
 
 @router.message()
 async def handle_text(message: types.Message):
@@ -33,10 +36,11 @@ async def handle_text(message: types.Message):
     except Exception as e:
         logger.error(f"Ошибка отправки: {e}")
 
-    # Уведомление админу — ПОСЛЕ ответа, с полным диалогом
-    if ADMIN_ID:
+    # Уведомление админу
+    logger.info(f"🔔 Пробуем отправить уведомление на ADMIN_ID={ADMIN_ID}")
+    if ADMIN_ID and ADMIN_ID != 0:
         try:
-            await message.bot.send_message(
+            sent = await message.bot.send_message(
                 ADMIN_ID,
                 f"🔔 <b>Новый диалог</b>\n\n"
                 f"👤 Клиент: {full_name}\n"
@@ -45,5 +49,8 @@ async def handle_text(message: types.Message):
                 f"💬 <b>Написал:</b> {user_text}\n\n"
                 f"🤖 <b>Бот ответил:</b> {answer}"
             )
+            logger.info(f"✅ Уведомление отправлено! message_id={sent.message_id}")
         except Exception as e:
-            logger.error(f"Ошибка уведомления: {e}")
+            logger.error(f"❌ Ошибка уведомления: {e}")
+    else:
+        logger.warning(f"⚠️ ADMIN_ID = {ADMIN_ID} — уведомление не отправлено")

@@ -6,7 +6,6 @@ logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.groq.com/openai/v1")
-MODEL_NAME = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
 
 client = AsyncOpenAI(
     api_key=OPENAI_API_KEY,
@@ -28,37 +27,13 @@ SYSTEM_PROMPT = """Ты — вежливый ассистент Евгения �
 9. Пиши грамотно.
 """
 
-
-async def get_available_models() -> list:
-    try:
-        response = await client.models.list()
-        models = [m.id for m in response.data]
-        logger.info(f"Доступные модели: {models}")
-        return models
-    except Exception as e:
-        logger.error(f"Не удалось получить список моделей: {e}")
-        return []
-
-
-def pick_best_model(models: list):
-    BAD_MODELS = ["allam", "whisper", "tts", "guard", "gemma2-9b", "llama-3.2-1b", "llama-3.2-3b"]
-    good_models = [m for m in models if not any(bad in m.lower() for bad in BAD_MODELS)]
-    if not good_models:
-        good_models = models
-
-    priorities = [
-        "llama-3.3-70b-versatile",
-        "llama-3.3-70b",
-        "llama-3.1-70b-versatile",
-        "llama3-70b",
-        "llama-3.1-8b-instant",
-        "llama3-8b",
-    ]
-    for pref in priorities:
-        for m in good_models:
-            if pref in m.lower():
-                return m
-    return good_models[0] if good_models else None
+# НАДЁЖНЫЕ МОДЕЛИ (только те, что точно работают с русским)
+RELIABLE_MODELS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "llama3-70b-8192",
+    "llama-3.1-70b-versatile",
+]
 
 
 async def ask_agent(user_id, user_text):
@@ -77,25 +52,16 @@ async def ask_agent(user_id, user_text):
         logger.warning(f"Память недоступна: {e}")
         history = [{"role": "user", "content": user_text}]
 
-    models = await get_available_models()
-    if not models:
-        return "Проблема с AI. Попробуйте позже 🙏"
-
-    best = pick_best_model(models)
-    logger.info(f"Выбрана модель: {best}")
-
-    models_to_try = [best] + [m for m in models if m != best]
-    models_to_try = models_to_try[:5]
-
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-10:]
 
-    for model in models_to_try:
+    last_error = None
+    for model in RELIABLE_MODELS:
         try:
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=0.3,
-                max_tokens=150,
+                max_tokens=200,
             )
             text = response.choices[0].message.content
 
@@ -114,7 +80,9 @@ async def ask_agent(user_id, user_text):
             return text
 
         except Exception as e:
+            last_error = str(e)
             logger.warning(f"Модель {model} не сработала: {e}")
             continue
 
+    logger.error(f"Все модели упали. Последняя ошибка: {last_error}")
     return "Извините, сейчас не могу ответить, попробуйте позже 🙏"

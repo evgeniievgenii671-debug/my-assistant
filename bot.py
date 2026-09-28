@@ -20,7 +20,6 @@ PORT = int(os.environ.get("PORT", 8080))
 
 
 async def health_check(request):
-    """Health-check для cron-job.org — отвечает 200 OK."""
     return web.Response(text="OK", status=200)
 
 
@@ -38,7 +37,8 @@ async def main():
         logger.info("Bot started (webhook): %s", WEBHOOK_URL)
 
         app = web.Application()
-        # Health-check регистрируем ПЕРВЫМ
+
+        # ✅ ЭТА СТРОКА ДОБАВЛЕНА
         app.router.add_get("/", health_check)
 
         SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)

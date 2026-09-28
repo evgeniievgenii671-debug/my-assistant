@@ -15,45 +15,47 @@ client = AsyncOpenAI(
 SYSTEM_PROMPT = """Ты — вежливый ассистент Евгения Алексеевича.
 МЫ ЗАНИМАЕМСЯ: Telegram/WhatsApp-боты, сайты, AI-ассистенты для бизнеса.
 
-ПРАВИЛА:
-1. Отвечай МАКСИМУМ 1-2 предложениями.
-2. Задавай ТОЛЬКО ОДИН вопрос.
-3. ЗАПРЕЩЕНЫ вступления ("Привет", "Конечно", "Отлично").
-4. Не пиши "Бот:" или "Ассистент:".
-5. Если клиент назвал имя — используй. Не хочет — не настаивай.
-6. Цены не называй: "Зависит от задачи".
-7. Пиши грамотно по-русски.
+СТРОГИЕ ПРАВИЛА:
+1. Пиши ТОЛЬКО законченными предложениями. Никаких обрывков.
+2. Отвечай 1-2 предложениями. Максимум 25 слов.
+3. Задавай ТОЛЬКО ОДИН вопрос.
+4. ЗАПРЕЩЕНЫ вступления ("Привет", "Конечно", "Отлично").
+5. ЗАПРЕЩЕНО выдумывать услуги, которых нет. Мы НЕ делаем видеосвязь, звонки, консультации по телефону.
+6. Не пиши "Бот:" или "Ассистент:".
+7. Если клиент назвал имя — используй его. Не хочет — не настаивай.
+8. Цены не называй: "Зависит от задачи".
+9. Пиши грамотно по-русски.
+
+ПРИМЕРЫ ПРАВИЛЬНЫХ ОТВЕТОВ:
+Клиент: Евгений
+Бот: Приятно познакомиться! Какая из услуг вас интересует?
+
+Клиент: Сайт для салона
+Бот: Отлично! Какой именно салон — красоты, барбершоп?
+
+Клиент: Как вы работаете?
+Бот: Мы общаемся в чате — пишем вам и отвечаем на вопросы.
 """
 
-# Что исключаем: TTS, арабские, whisper, слабые
-BAD_MODELS = [
-    "whisper", "tts", "orpheus", "guard",
-    "arabic", "saudi", "allam",
-    "llama-3.2-1b", "llama-3.2-3b",
-]
+# ТОЛЬКО ХОРОШИЕ МОДЕЛИ (без TTS, арабских, слабых)
+BAD_MODELS = ["whisper", "tts", "orpheus", "guard", "arabic", "saudi", "allam",
+              "llama-3.2-1b", "llama-3.2-3b", "qwen", "gpt-oss-20b"]
 
-# Приоритет моделей (сначала самые умные для русского)
 PRIORITY = [
     "llama-3.3-70b-versatile",
     "openai/gpt-oss-120b",
     "moonshotai/kimi-k2",
     "meta-llama/llama-4-maverick",
-    "meta-llama/llama-4-scout",
     "llama-3.1-8b-instant",
-    "qwen/qwen3-32b",
-    "openai/gpt-oss-20b",  # последний вариант
 ]
 
 
 async def get_good_models() -> list:
-    """Запрашивает у Groq актуальный список моделей."""
     try:
         response = await client.models.list()
         all_models = [m.id for m in response.data]
-        logger.info(f"Всего моделей: {len(all_models)}")
-
         good = [m for m in all_models if not any(bad in m.lower() for bad in BAD_MODELS)]
-        logger.info(f"Подходящих: {good}")
+        logger.info(f"Подходящих моделей: {good}")
         return good
     except Exception as e:
         logger.error(f"Ошибка получения моделей: {e}")
@@ -61,13 +63,11 @@ async def get_good_models() -> list:
 
 
 def sort_by_priority(models: list) -> list:
-    """Сортирует модели по приоритету."""
     result = []
     for pref in PRIORITY:
         for m in models:
             if pref in m.lower() and m not in result:
                 result.append(m)
-    # Добавляем оставшиеся
     for m in models:
         if m not in result:
             result.append(m)
@@ -76,7 +76,6 @@ def sort_by_priority(models: list) -> list:
 
 async def ask_agent(user_id, user_text):
     if not OPENAI_API_KEY:
-        logger.error("API-ключ не задан!")
         return "Ошибка конфигурации."
 
     # История
@@ -90,12 +89,11 @@ async def ask_agent(user_id, user_text):
         logger.warning(f"Память недоступна: {e}")
         history = [{"role": "user", "content": user_text}]
 
-    # Получаем актуальные модели
+    # Модели
     models = await get_good_models()
     if not models:
         return "Проблема с AI. Попробуйте позже 🙏"
 
-    # Сортируем по приоритету
     models_to_try = sort_by_priority(models)[:5]
     logger.info(f"Порядок попыток: {models_to_try}")
 
@@ -108,13 +106,18 @@ async def ask_agent(user_id, user_text):
                 model=model,
                 messages=messages,
                 temperature=0.3,
-                max_tokens=200,
+                max_tokens=300,  # Увеличили: чтобы не обрывался
             )
             text = response.choices[0].message.content
 
             if not text or not text.strip():
                 logger.warning(f"{model}: пустой ответ")
                 continue
+
+            # Проверка на обрыв (заканчивается ли точкой/!/?)
+            text = text.strip()
+            if text and text[-1] not in ".!?…":
+                text += "."
 
             logger.info(f"✅ Ответила: {model}")
 
@@ -133,30 +136,3 @@ async def ask_agent(user_id, user_text):
 
     logger.error(f"Все упали. Последняя: {last_error}")
     return "Извините, сейчас не могу ответить 🙏"
-import re
-
-
-def extract_phone(text: str):
-    """Ищет телефон в тексте."""
-    patterns = [
-        r"\+7[\s\-\(\)]?\d{3}[\s\-\(\)]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}",
-        r"8[\s\-\(\)]?\d{3}[\s\-\(\)]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}",
-        r"\d{10,11}",
-    ]
-    for p in patterns:
-        m = re.search(p, text)
-        if m:
-            return m.group(0)
-    return None
-
-
-async def auto_save_profile(user_id: int, user_text: str):
-    """Автоматически сохраняет телефон из сообщения."""
-    try:
-        from services.memory import update_profile
-        phone = extract_phone(user_text)
-        if phone:
-            await update_profile(user_id, phone=phone)
-            logger.info(f"📱 Телефон сохранён для {user_id}: {phone}")
-    except Exception as e:
-        logger.warning(f"Не удалось сохранить телефон: {e}")

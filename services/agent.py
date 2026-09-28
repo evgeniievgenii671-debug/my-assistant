@@ -25,14 +25,53 @@ SYSTEM_PROMPT = """Ты — вежливый ассистент Евгения �
 7. Пиши грамотно по-русски.
 """
 
-# ТОЛЬКО ПРОВЕРЕННЫЕ МОДЕЛИ ДЛЯ РУССКОГО
-RELIABLE_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "llama3-70b-8192",
-    "llama3-8b-8192",
-    "openai/gpt-oss-120b",
+# Что исключаем: TTS, арабские, whisper, слабые
+BAD_MODELS = [
+    "whisper", "tts", "orpheus", "guard",
+    "arabic", "saudi", "allam",
+    "llama-3.2-1b", "llama-3.2-3b",
 ]
+
+# Приоритет моделей (сначала самые умные для русского)
+PRIORITY = [
+    "llama-3.3-70b-versatile",
+    "openai/gpt-oss-120b",
+    "moonshotai/kimi-k2",
+    "meta-llama/llama-4-maverick",
+    "meta-llama/llama-4-scout",
+    "llama-3.1-8b-instant",
+    "qwen/qwen3-32b",
+    "openai/gpt-oss-20b",  # последний вариант
+]
+
+
+async def get_good_models() -> list:
+    """Запрашивает у Groq актуальный список моделей."""
+    try:
+        response = await client.models.list()
+        all_models = [m.id for m in response.data]
+        logger.info(f"Всего моделей: {len(all_models)}")
+
+        good = [m for m in all_models if not any(bad in m.lower() for bad in BAD_MODELS)]
+        logger.info(f"Подходящих: {good}")
+        return good
+    except Exception as e:
+        logger.error(f"Ошибка получения моделей: {e}")
+        return []
+
+
+def sort_by_priority(models: list) -> list:
+    """Сортирует модели по приоритету."""
+    result = []
+    for pref in PRIORITY:
+        for m in models:
+            if pref in m.lower() and m not in result:
+                result.append(m)
+    # Добавляем оставшиеся
+    for m in models:
+        if m not in result:
+            result.append(m)
+    return result
 
 
 async def ask_agent(user_id, user_text):
@@ -40,7 +79,7 @@ async def ask_agent(user_id, user_text):
         logger.error("API-ключ не задан!")
         return "Ошибка конфигурации."
 
-    # Загружаем историю
+    # История
     add_message = None
     try:
         from services.memory import get_history, add_message
@@ -51,10 +90,19 @@ async def ask_agent(user_id, user_text):
         logger.warning(f"Память недоступна: {e}")
         history = [{"role": "user", "content": user_text}]
 
+    # Получаем актуальные модели
+    models = await get_good_models()
+    if not models:
+        return "Проблема с AI. Попробуйте позже 🙏"
+
+    # Сортируем по приоритету
+    models_to_try = sort_by_priority(models)[:5]
+    logger.info(f"Порядок попыток: {models_to_try}")
+
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history[-10:]
 
     last_error = None
-    for model in RELIABLE_MODELS:
+    for model in models_to_try:
         try:
             response = await client.chat.completions.create(
                 model=model,
@@ -65,10 +113,10 @@ async def ask_agent(user_id, user_text):
             text = response.choices[0].message.content
 
             if not text or not text.strip():
-                logger.warning(f"Модель {model} вернула пусто")
+                logger.warning(f"{model}: пустой ответ")
                 continue
 
-            logger.info(f"✅ Ответила модель: {model}")
+            logger.info(f"✅ Ответила: {model}")
 
             if add_message:
                 try:
@@ -80,8 +128,8 @@ async def ask_agent(user_id, user_text):
 
         except Exception as e:
             last_error = str(e)
-            logger.warning(f"Модель {model} не сработала: {e}")
+            logger.warning(f"{model} не сработала: {e}")
             continue
 
-    logger.error(f"Все модели упали. Последняя: {last_error}")
+    logger.error(f"Все упали. Последняя: {last_error}")
     return "Извините, сейчас не могу ответить 🙏"

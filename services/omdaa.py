@@ -5,11 +5,10 @@ from config import OMDAA_API_KEY, OMDAA_SESSION_ID
 logger = logging.getLogger(__name__)
 
 
-async def omdaa_webhook_handler(request):
-    ...
+async def send_whatsapp_message(to: str, text: str):
     """Отправляет сообщение в WhatsApp через API Omdaa."""
     if not OMDAA_API_KEY or not OMDAA_SESSION_ID:
-        logger.warning("Omdaa не настроен")
+        logger.warning("Omdaa не настроен — сообщение не отправлено")
         return
 
     url = "https://omdaa.com/api/v1/messages/send-text"

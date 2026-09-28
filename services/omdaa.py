@@ -28,6 +28,6 @@ async def send_whatsapp_message(to: str, text: str):
                 if resp.status != 200:
                     logger.error("Ошибка Omdaa %s: %s", resp.status, body)
                 else:
-                    logger.info("Сообщение отправлено в WhatsApp %s", to)
+                    logger.info("✅ Сообщение отправлено в WhatsApp %s", to)
     except Exception:
         logger.exception("Не удалось отправить в WhatsApp")

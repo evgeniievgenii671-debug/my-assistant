@@ -126,8 +126,11 @@ async def ask_agent(user_id, user_text):
                 temperature=0.3,
                 max_tokens=150,
             )
-            text = response.choices[0].message.content
-            logger.info(f"✅ Ответила модель: {model}")
+           text = response.choices[0].message.content
+if not text or not text.strip():
+    logger.warning(f"Модель {model} вернула пустой ответ, пробуем следующую")
+    continue
+logger.info(f"✅ Ответила модель: {model}")
 
             # Сохраняем в память
             if add_message:

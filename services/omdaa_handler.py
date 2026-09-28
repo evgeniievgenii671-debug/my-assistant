@@ -7,7 +7,8 @@ from services.omdaa import send_whatsapp_message
 logger = logging.getLogger(__name__)
 
 
-async def omdaa_webhook_handler(request: web.Request) -> web.Response:
+async def omdaa_webhook_handler(request):
+    ...
     """Принимает вебхук от Omdaa (WhatsApp-сообщение) и отвечает."""
     try:
         data = await request.json()
